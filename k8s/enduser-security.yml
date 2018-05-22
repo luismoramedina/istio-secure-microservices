@@ -1,0 +1,28 @@
+apiVersion: config.istio.io/v1alpha2
+kind: EndUserAuthenticationPolicySpec
+metadata:
+  labels:
+    app: books
+  name: books-jwt-auth
+  namespace: default
+spec:
+  jwts:
+  - issuer: test
+    jwks_uri: "http://key-repo:8080/"
+    forwardJwt: true
+---
+apiVersion: config.istio.io/v1alpha2
+kind: EndUserAuthenticationPolicySpecBinding
+metadata:
+  name: books-jwt-auth-binding
+  namespace: default
+spec:
+  policies:
+  - name: books-jwt-auth
+    namespace: default
+  services:
+  - name: books
+    namespace: default
+  - name: stars
+    namespace: default
+---

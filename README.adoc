@@ -1,0 +1,82 @@
+= Istio MSA
+
+Microservice architecture + istio
+
+This sample installs 2 microservices: Books and stars.
+Books call stars to get the rating of a book.
+
+Both are installed in openshift near the envoy proxyes provided by istio. This proxy
+handles ingress and egress traffic.
+
+
+== Install GKE + Istio
+
+----
+gcloud container clusters create istio-cluster \
+    --cluster-version=1.9.6-gke.1 --num-nodes 1 --machine-type n1-standard-2 \
+    --project technology-foundations
+
+kubectl create clusterrolebinding cluster-admin-binding \
+    --clusterrole=cluster-admin \
+    --user=$(gcloud config get-value core/account)
+----
+
+Now download istio (we use 0.7.1) software, uncompress it to $ISTIO_DIR:
+
+----
+kubectl apply -f $ISTIO_DIR/install/kubernetes/istio.yaml
+# i had to launch this command 2 times, check https://github.com/istio/issues/issues/123
+----
+
+== Install MSA on Kubernetes
+
+----
+kubectl apply -f <($ISTIO_DIR/bin/istioctl kube-inject -f msa.yml)
+
+BOOKS_IP=$(kubectl get svc books -o jsonpath="{.status.loadBalancer.ingress[0].*}")
+curl -i http://$BOOKS_IP:8081/books
+----
+
+=== Installing security
+
+----
+kubectl apply -f k8s/keyrepo.yml
+kubectl apply -f k8s/enduser-security.yml
+----
+
+=== Zipkin
+
+----
+kubectl apply -f $ISTIO_DIR/install/kubernetes/addons/zipkin.yaml
+----
+
+== Testing
+
+Get books:
+----
+curl -i http://$BOOKS_IP:8081/books -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjIyMjEwMzk1NTIsImlzcyI6InRlc3QiLCJzdWIiOiJib2IifQ.OHuf7wL_XFk----LsGqC8HwJyHRiogcQIM2g3fEUdLjr8CjkZccrw20Ybq8FvD8Zw0wrzxEii8gbEnfjcAbFYUtwzQPGTHRgpvEZGCNJcuUrhkq3A5bLCArg2NANS-lZgFfEEGHY8TQB951MvVLvhu7z1q5C-eRLAZ-U10TwiGCguLL5W-SQhgHiPr6n6aVrOqWGE7h0lELQnjc2Eq7iZuULkRRMjJNE3H0F5qfxpmMj_mW3sGvq6UQTf1W3lEGA0ercTdguQy9e5JRa0DdkpwOhF8zlF29D0HP3N5EKV7W1MpChrqYuromTPrYjvetOCNVz3Nk_VeHH8qTW-hvHxQQ"
+----
+
+Get books without security:
+----
+curl -i http://$BOOKS_IP:8081/books
+----
+
+Get books without forwarding security (must fail):
+----
+curl -i http://$BOOKS_IP:8081/books/books-no-forward-auth -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjIyMjEwMzk1NTIsImlzcyI6InRlc3QiLCJzdWIiOiJib2IifQ.OHuf7wL_XFk----LsGqC8HwJyHRiogcQIM2g3fEUdLjr8CjkZccrw20Ybq8FvD8Zw0wrzxEii8gbEnfjcAbFYUtwzQPGTHRgpvEZGCNJcuUrhkq3A5bLCArg2NANS-lZgFfEEGHY8TQB951MvVLvhu7z1q5C-eRLAZ-U10TwiGCguLL5W-SQhgHiPr6n6aVrOqWGE7h0lELQnjc2Eq7iZuULkRRMjJNE3H0F5qfxpmMj_mW3sGvq6UQTf1W3lEGA0ercTdguQy9e5JRa0DdkpwOhF8zlF29D0HP3N5EKV7W1MpChrqYuromTPrYjvetOCNVz3Nk_VeHH8qTW-hvHxQQ"
+----
+
+Create book entity:
+----
+curl -i -X POST http://$BOOKS_IP:8081/books -H "Content-type: application/json" -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjIyMjEwMzk1NTIsImlzcyI6InRlc3QiLCJzdWIiOiJib2IifQ.OHuf7wL_XFk----LsGqC8HwJyHRiogcQIM2g3fEUdLjr8CjkZccrw20Ybq8FvD8Zw0wrzxEii8gbEnfjcAbFYUtwzQPGTHRgpvEZGCNJcuUrhkq3A5bLCArg2NANS-lZgFfEEGHY8TQB951MvVLvhu7z1q5C-eRLAZ-U10TwiGCguLL5W-SQhgHiPr6n6aVrOqWGE7h0lELQnjc2Eq7iZuULkRRMjJNE3H0F5qfxpmMj_mW3sGvq6UQTf1W3lEGA0ercTdguQy9e5JRa0DdkpwOhF8zlF29D0HP3N5EKV7W1MpChrqYuromTPrYjvetOCNVz3Nk_VeHH8qTW-hvHxQQ" -d "{\"id\":2100,\"title\":\"1984\",\"year\":\"1949\",\"author\":\"George Orwell\",\"stars\":5}"
+----
+
+NOTE: this is a JWT that is valid for the default (hardcoded) public key, check https://github.com/luismoramedina/jwt-go
+eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjIyMjEwMzk1NTIsImlzcyI6InRlc3QiLCJzdWIiOiJib2IifQ.OHuf7wL_XFk----LsGqC8HwJyHRiogcQIM2g3fEUdLjr8CjkZccrw20Ybq8FvD8Zw0wrzxEii8gbEnfjcAbFYUtwzQPGTHRgpvEZGCNJcuUrhkq3A5bLCArg2NANS-lZgFfEEGHY8TQB951MvVLvhu7z1q5C-eRLAZ-U10TwiGCguLL5W-SQhgHiPr6n6aVrOqWGE7h0lELQnjc2Eq7iZuULkRRMjJNE3H0F5qfxpmMj_mW3sGvq6UQTf1W3lEGA0ercTdguQy9e5JRa0DdkpwOhF8zlF29D0HP3N5EKV7W1MpChrqYuromTPrYjvetOCNVz3Nk_VeHH8qTW-hvHxQQ
+
+== Features
+
+* [x] tracing with opentracing and zipkin
+* [x] jwt security validation and propagation
+* [x] plain security context generation and propagation

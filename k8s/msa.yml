@@ -1,0 +1,105 @@
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  labels:
+    app: books
+  name: books
+  namespace: default
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: books
+    spec:
+      containers:
+      - image: luismoramedina/books-i
+        imagePullPolicy: Always
+        name: books
+        env:
+        - name: SERVER_PORT
+          value: "8081"
+        - name: STARS_SERVICE_URI
+          value: "http://stars:8081/stars/{bookId}"
+        - name: SPRING_APPLICATION_NAME
+          value: "books"
+        - name: SPRING_ZIPKIN_BASEURL
+          value: "http://zipkin.istio-system:9411"
+        - name: SPRING_SLEUTH_SAMPLER_PERCENTAGE
+          value: "1.0"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: books
+  labels:
+    app: books
+  namespace: default
+spec:
+  type: LoadBalancer
+  ports:
+  - name: http
+    port: 8081
+    protocol: TCP
+    targetPort: 8081
+  selector:
+    app: books
+---
+apiVersion: v1
+kind: Route
+metadata:
+  name: books
+  labels:
+    app: books
+  namespace: default
+spec:
+  port:
+    targetPort: http
+  to:
+    kind: Service
+    name: books
+---
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: stars
+  labels:
+    app: stars
+  namespace: default
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: stars
+    spec:
+      containers:
+      - image: luismoramedina/stars-i
+        imagePullPolicy: Always
+        name: stars
+        env:
+        - name: SERVER_PORT
+          value: "8081"
+        - name: SPRING_APPLICATION_NAME
+          value: "stars"
+        - name: SPRING_ZIPKIN_BASEURL
+          value: "http://zipkin.istio-system:9411"
+        - name: SPRING_SLEUTH_SAMPLER_PERCENTAGE
+          value: "1.0"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: stars
+  labels:
+    app: stars
+  namespace: default
+spec:
+  ports:
+  - name: http
+    port: 8081
+    protocol: TCP
+    targetPort: 8081
+  selector:
+    app: stars
+---
